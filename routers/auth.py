@@ -143,6 +143,47 @@ class BulkSyncResult(BaseModel):
     total: int
 
 
+class BulkHubSpotSyncRequest(BaseModel):
+    krs_list: list[str]
+
+
+@router.post("/companies/hubspot-sync-bulk", response_model=BulkSyncResult)
+async def sync_bulk(body: BulkHubSpotSyncRequest):
+    """Synchronizuje zaznaczone spółki (lista KRS) z HubSpot."""
+    from services.firebase_service import FirebaseNotConfiguredError, get_company, save_company
+
+    if not body.krs_list:
+        raise HTTPException(status_code=400, detail="Lista KRS nie może być pusta")
+
+    hs = HubSpotService()
+    synced = failed = 0
+
+    for krs in body.krs_list:
+        try:
+            company = get_company(krs)
+        except FirebaseNotConfiguredError as e:
+            raise HTTPException(status_code=503, detail=str(e))
+
+        if not company:
+            failed += 1
+            continue
+
+        try:
+            result = await hs.sync_company(company)
+            company.hubspot_company_id = result["hubspot_company_id"]
+            company.hubspot_contact_id = result.get("hubspot_contact_id")
+            company.hubspot_synced_at = datetime.utcnow()
+            save_company(company)
+            synced += 1
+        except HubSpotNotConnectedError:
+            raise HTTPException(status_code=503, detail="HubSpot nie jest połączony")
+        except Exception as e:
+            logger.warning("HubSpot sync failed for %s: %s", krs, e)
+            failed += 1
+
+    return BulkSyncResult(synced=synced, failed=failed, total=len(body.krs_list))
+
+
 @router.post("/companies/hubspot-sync-all", response_model=BulkSyncResult)
 async def sync_all(limit: int = Query(500, ge=1, le=2000)):
     """Synchronizuje wszystkie spółki z Firebase do HubSpot."""

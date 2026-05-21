@@ -102,11 +102,19 @@ class Settings(BaseSettings):
             "http://localhost:5173",
             "http://127.0.0.1:5173",
         ]
-        if self.frontend_url:
-            origins.append(self.frontend_url.rstrip("/"))
+        frontend = self.frontend_url.strip().rstrip("/")
+        # Poprawka literówki w .env (hhttps://...)
+        if frontend.startswith("hhttps://"):
+            frontend = frontend[1:]
+        if frontend:
+            origins.append(frontend)
+            # Firebase Hosting: web.app ↔ firebaseapp.com
+            if frontend.endswith(".web.app"):
+                origins.append(frontend.replace(".web.app", ".firebaseapp.com"))
+            elif frontend.endswith(".firebaseapp.com"):
+                origins.append(frontend.replace(".firebaseapp.com", ".web.app"))
         if self.cors_origins:
             origins.extend(o.strip().rstrip("/") for o in self.cors_origins.split(",") if o.strip())
-        # zachowaj kolejność, usuń duplikaty
         return list(dict.fromkeys(origins))
 
     @property

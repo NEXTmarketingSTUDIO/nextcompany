@@ -82,7 +82,7 @@ class KRSClient:
             await asyncio.sleep(0.05)
         return None, None, None
 
-    async def search_by_date(self, target_date: date) -> list[Company]:
+    async def search_by_date(self, target_date: date, limit: int | None = None) -> list[Company]:
         estimate = _estimate_krs(target_date)
         lo = max(1, estimate - SEARCH_WINDOW)
         hi = estimate + SEARCH_WINDOW
@@ -95,12 +95,16 @@ class KRSClient:
             return []
         logger.info(f"Pivot: KRS {pivot}")
 
-        # 2. Skanuj wstecz, żeby znaleźć PIERWSZY KRS z target_date
-        first = await self._scan_to_boundary(pivot, target_date, direction=-1)
-        logger.info(f"Pierwsza spolka z {target_date}: KRS {first}")
+        # 2. Pełny skan wstecz tylko bez limitu — przy limicie zaczynamy od pivota
+        if limit is not None:
+            first = pivot
+            logger.info(f"Limit {limit}: zbieram max {limit} spolek od KRS {first} (pomijam skan wstecz)")
+        else:
+            first = await self._scan_to_boundary(pivot, target_date, direction=-1)
+            logger.info(f"Pierwsza spolka z {target_date}: KRS {first}")
 
-        # 3. Zbierz wszystkie spółki z target_date
-        companies = await self._collect(first, target_date)
+        # 3. Zbierz spółki z target_date
+        companies = await self._collect(first, target_date, limit=limit)
         logger.info(f"Lacznie {len(companies)} spolkach z {target_date}")
         return companies
 
@@ -170,13 +174,15 @@ class KRSClient:
 
         return current
 
-    async def _collect(self, start: int, target: date) -> list[Company]:
+    async def _collect(self, start: int, target: date, limit: int | None = None) -> list[Company]:
         """Zbiera spółki skanując od start w przód dopóki data == target."""
         companies: list[Company] = []
         current = start
         consecutive_other = 0
 
         while consecutive_other < 20:
+            if limit is not None and len(companies) >= limit:
+                break
             reg_date, data = await self._fetch(current)
             await asyncio.sleep(0.3)
 
@@ -191,6 +197,8 @@ class KRSClient:
                 if company:
                     companies.append(company)
                     logger.info(f"  ✓ KRS {current}: {company.name} | email={company.email} | www={company.website}")
+                    if limit is not None and len(companies) >= limit:
+                        break
             elif reg_date > target:
                 break
             else:

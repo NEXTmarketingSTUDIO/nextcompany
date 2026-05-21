@@ -188,6 +188,31 @@ def delete_companies(krs_list: list[str]) -> int:
     return count
 
 
+def _has_contact_data(data: dict) -> bool:
+    email = (data.get("email") or "").strip()
+    phone = (data.get("phone") or "").strip()
+    return bool(email or phone)
+
+
+def count_companies_without_contact() -> int:
+    db = _require_db()
+    count = 0
+    for doc in db.collection("companies").stream():
+        if not _has_contact_data(doc.to_dict() or {}):
+            count += 1
+    return count
+
+
+def delete_companies_without_contact() -> int:
+    """Usuwa firmy bez emaila i bez telefonu."""
+    db = _require_db()
+    to_delete: list[str] = []
+    for doc in db.collection("companies").stream():
+        if not _has_contact_data(doc.to_dict() or {}):
+            to_delete.append(doc.id)
+    return delete_companies(to_delete)
+
+
 def log_email(log: EmailLog) -> None:
     db = _require_db()
     db.collection("email_logs").add(log.to_dict())

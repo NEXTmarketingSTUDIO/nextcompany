@@ -64,6 +64,7 @@ class ScrapeRequest(BaseModel):
     branza: str | None = None       # litera PKD np. "M", lub None = wszystkie
     city: str | None = None         # np. "Poznań"
     radius_km: float | None = None  # promień w km, np. 50
+    max: int | None = None          # max firm na źródło (KRS i CEIDG); None = wszystkie
 
 
 @app.post("/scrape/trigger")
@@ -75,15 +76,19 @@ async def trigger_scrape(body: ScrapeRequest = ScrapeRequest()):
         except ValueError:
             raise HTTPException(status_code=400, detail="Nieprawidlowy format daty. Uzyj YYYY-MM-DD")
 
+    if body.max is not None and body.max < 1:
+        raise HTTPException(status_code=400, detail="max musi być >= 1 lub puste (wszystkie firmy)")
+
     logger.info(
         f"Scraping: data={target_date}, branza={body.branza}, "
-        f"miasto={body.city}, promien={body.radius_km}"
+        f"miasto={body.city}, promien={body.radius_km}, max={body.max}"
     )
     result = await run_daily_scrape(
         target_date=target_date,
         branza=body.branza or None,
         city=body.city or None,
         radius_km=body.radius_km,
+        limit=body.max,
     )
     return {
         "message": "Scraping zakończony",

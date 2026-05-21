@@ -7,7 +7,9 @@ from pydantic import BaseModel
 from models.company import Company
 from services.firebase_service import (
     FirebaseNotConfiguredError,
+    count_companies_without_contact,
     delete_companies,
+    delete_companies_without_contact,
     delete_company,
     get_companies,
     get_company,
@@ -47,6 +49,26 @@ async def list_companies(
         "limit": limit,
         "pages": max(1, -(-total // limit)),
     }
+
+
+@router.get("/no-contact/count")
+async def no_contact_count():
+    """Liczba firm w bazie bez emaila i telefonu."""
+    try:
+        count = count_companies_without_contact()
+    except FirebaseNotConfiguredError as e:
+        raise HTTPException(status_code=503, detail=str(e))
+    return {"count": count}
+
+
+@router.delete("/no-contact", status_code=200)
+async def delete_no_contact():
+    """Usuwa wszystkie firmy bez danych kontaktowych (brak emaila i telefonu)."""
+    try:
+        deleted = delete_companies_without_contact()
+    except FirebaseNotConfiguredError as e:
+        raise HTTPException(status_code=503, detail=str(e))
+    return {"deleted": deleted}
 
 
 @router.get("/{krs}", response_model=Company)

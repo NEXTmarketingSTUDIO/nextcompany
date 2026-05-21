@@ -58,25 +58,31 @@ async def run_daily_scrape(
     branza: str | None = None,
     city: str | None = None,
     radius_km: float | None = None,
+    limit: int | None = None,
 ) -> dict:
     if target_date is None:
         target_date = date.today()
 
+    limit_label = (
+        f"max {limit} na źródło (KRS + CEIDG osobno)"
+        if limit is not None
+        else "bez limitu — pełne pobranie dnia"
+    )
     logger.info(
         f"=== Scraping {target_date} | branża={branza or 'wszystkie'} | "
-        f"miasto={city or 'wszędzie'} | promień={radius_km or '—'} km ==="
+        f"miasto={city or 'wszędzie'} | promień={radius_km or '—'} km | {limit_label} ==="
     )
 
     # ── KRS (spółki) ────────────────────────────────────────────────────────
     async with KRSClient() as krs:
-        krs_companies = await krs.search_by_date(target_date)
+        krs_companies = await krs.search_by_date(target_date, limit=limit)
     logger.info(f"KRS: pobrano {len(krs_companies)} spółek")
 
     # ── CEIDG (JDG) ─────────────────────────────────────────────────────────
     ceidg_companies = []
     if settings.ceidg_configured:
         async with CEIDGClient(settings.ceidg_api_key) as ceidg:
-            ceidg_companies = await ceidg.search_by_date(target_date)
+            ceidg_companies = await ceidg.search_by_date(target_date, limit=limit)
         logger.info(f"CEIDG: pobrano {len(ceidg_companies)} firm")
     else:
         logger.info("CEIDG: pominięto (brak CEIDG_API_KEY w .env)")
